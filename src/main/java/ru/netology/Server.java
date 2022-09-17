@@ -54,11 +54,19 @@ public class Server {
 
     }
         public void connect(Socket socket) {
+            final BufferedOutputStream out;
+
+            try {
+                out = new BufferedOutputStream(socket.getOutputStream());
+            } catch (IOException e) {
+                e.printStackTrace();
+                return;
+            }
+
             try (socket;
                  final var in = socket.getInputStream();
-                 final var out = new BufferedOutputStream(socket.getOutputStream());) {
-
-                var request = Request.fromInputStream(in);
+                 ) {
+                var request = Request.createRequest(in);
                 var pathHandlerMap = handlers.get(request.getMethod());
                 if (pathHandlerMap == null) {
                     notFoundHandler.handle(request, out);
@@ -70,9 +78,24 @@ public class Server {
                     return;
                 }
                 handler.handle(request, out);
+
+            }
+            catch (IOException e) {
+                e.printStackTrace();
+            } catch (BadRequestException e) {
+                try {
+                    badRequest(out);
+                } catch (IOException ex) {
+                    System.out.println(e.getMessage());
+                }
+            }
+
+            try {
+                out.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
         }
 
     public static void outWrite(String mimeType, byte[] content, BufferedOutputStream out) throws IOException {
@@ -86,6 +109,16 @@ public class Server {
         out.write(content);
         out.flush();
     }
+    private static void badRequest(BufferedOutputStream out) throws IOException {
+        out.write((
+                "HTTP/1.1 400 Bad Request\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "Connection: close\r\n" +
+                        "\r\n"
+        ).getBytes());
+        out.flush();
     }
+    }
+
 
 

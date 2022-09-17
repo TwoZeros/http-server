@@ -1,54 +1,126 @@
 package ru.netology;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.util.HashMap;
-import java.util.Map;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.utils.URLEncodedUtils;
+
+import java.io.*;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class Request {
-
+    public static final String GET = "GET";
+    public static final String POST = "POST";
     private final InputStream in;
     private final String method;
+    private List<NameValuePair> queryParams;
     private String body;
     private final String path;
-    private final Map<String, String> headers;
+    private final List<String> headers;
+    final static List<String> allowedMethods = List.of(GET, POST);
 
-
-    public Request(String method, String path, Map<String, String> headers, InputStream in) {
+    public Request(String method, String path, List<String> headers,List<NameValuePair> queryParams, InputStream in) {
+        this.method = method;
+        this.path = path;
+        this.headers = headers;
+        this.queryParams = queryParams;
+        this.in = in;
+    }
+    public Request(String method, String path, List<String> headers,InputStream in) {
         this.method = method;
         this.path = path;
         this.headers = headers;
         this.in = in;
     }
 
-    public static Request fromInputStream(InputStream in) throws IOException {
-        var reader = new BufferedReader(new InputStreamReader(in));
+    public static Request createRequest(InputStream inputStream ) throws IOException, BadRequestException {
+        // лимит на request line + заголовки
+        final var limit = 4096;
+        final var in = new BufferedInputStream(inputStream);
 
-        final var requestLine = reader.readLine();
-        final var parts = requestLine.split(" ");
+        in.mark(limit);
+        final var buffer = new byte[limit];
+        final var read = in.read(buffer);
 
-        if (parts.length != 3) {
-            // just close socket
-            throw new IOException("Invalid Request");
+        // ищем request line
+        final var requestLineDelimiter = new byte[]{'\r', '\n'};
+        final var requestLineEnd = indexOf(buffer, requestLineDelimiter, 0, read);
+        if (requestLineEnd == -1) {
+           throw  new BadRequestException("Invalid requestLine");
         }
 
-        var method = parts[0];
-        var path = parts[1];
-
-        Map<String, String> headers = new HashMap<>();
-        String headerLine;
-        while (!(headerLine = reader.readLine()).equals("")) {
-            var i = headerLine.indexOf(":");
-            var headerName = headerLine.substring(0, i);
-            var headerValue = headerLine.substring(i + 2);
-            headers.put(headerName, headerValue);
+        // читаем request line
+        final var requestLine = new String(Arrays.copyOf(buffer, requestLineEnd)).split(" ");
+        if (requestLine.length != 3) {
+           throw new BadRequestException("Invalid request line");
         }
-        return new Request(method, path, headers, in);
+
+        final var method = requestLine[0];
+        if (!allowedMethods.contains(method)) {
+            throw new BadRequestException("Invalid method:" + method);
+        }
+        System.out.println(method);
+
+        String path = requestLine[1];
+        System.out.println(path);
+        if (!path.startsWith("/")) {
+            throw new BadRequestException("Invalid Path");
+        }
+        List<NameValuePair> queryParams = new ArrayList<>();
+        if (path.contains("?")) {
+            String[] value = path.split("\\?");
+            path = value[0];
+            String queryLine = value[1];
+            queryParams = URLEncodedUtils.parse(queryLine, Charset.defaultCharset());
+            System.out.println(queryParams);
+        }
+
+        System.out.println(path);
+
+        // ищем заголовки
+        final var headersDelimiter = new byte[]{'\r', '\n', '\r', '\n'};
+        final var headersStart = requestLineEnd + requestLineDelimiter.length;
+        final var headersEnd = indexOf(buffer, headersDelimiter, headersStart, read);
+        if (headersEnd == -1) {
+            throw new BadRequestException("Invalid header");
+        }
+
+        // отматываем на начало буфера
+        in.reset();
+        // пропускаем requestLine
+        in.skip(headersStart);
+
+        final var headersBytes = in.readNBytes(headersEnd - headersStart);
+        final var headers = Arrays.asList(new String(headersBytes).split("\r\n"));
+        System.out.println(headers);
+
+        // для GET тела нет
+        if (!method.equals(GET)) {
+            in.skip(headersDelimiter.length);
+            // вычитываем Content-Length, чтобы прочитать body
+            final var contentLength = extractHeader(headers, "Content-Length");
+            if (contentLength.isPresent()) {
+                final var length = Integer.parseInt(contentLength.get());
+                final var bodyBytes = in.readNBytes(length);
+
+                final var body = new String(bodyBytes);
+                System.out.println(body);
+            }
+        }
+        return new Request(method,path,headers,queryParams, in);
+    }
+    public Optional<String> getQueryParam(String nameParam) {
+        return queryParams.stream()
+                .filter(x -> x.getName()
+                        .equals(nameParam))
+                .findFirst()
+                .map(NameValuePair::getValue);
     }
 
-
+    public List<NameValuePair> getQueryParams() {
+        return queryParams;
+    }
     @Override
     public String toString() {
         return "server.Request{" +
@@ -67,12 +139,44 @@ public class Request {
         return path;
     }
 
-    public Map<String, String> getHeaders() {
+    public List<String> getHeaders() {
         return headers;
     }
 
     public String getMethod() {
         return method;
     }
+
+    // from google guava with modifications
+    private static int indexOf(byte[] array, byte[] target, int start, int max) {
+        outer:
+        for (int i = start; i < max - target.length + 1; i++) {
+            for (int j = 0; j < target.length; j++) {
+                if (array[i + j] != target[j]) {
+                    continue outer;
+                }
+            }
+            return i;
+        }
+        return -1;
+    }
+    private static void badRequest(BufferedOutputStream out) throws IOException {
+        out.write((
+                "HTTP/1.1 400 Bad Request\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "Connection: close\r\n" +
+                        "\r\n"
+        ).getBytes());
+        out.flush();
+    }
+
+    private static Optional<String> extractHeader(List<String> headers, String header) {
+        return headers.stream()
+                .filter(o -> o.startsWith(header))
+                .map(o -> o.substring(o.indexOf(" ")))
+                .map(String::trim)
+                .findFirst();
+    }
+
 
 }
