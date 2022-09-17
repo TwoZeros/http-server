@@ -24,7 +24,7 @@ public class Main {
             final var content = template.replace("{time}",
                             LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")))
                     .getBytes();
-            outWrite(mimeType, content, out);
+            Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -37,7 +37,7 @@ public class Main {
             final var mimeType = Files.probeContentType(filePath);
 
             final var content = Files.readAllBytes(filePath);
-            outWrite(mimeType, content, out);
+            Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -51,7 +51,7 @@ public class Main {
             final var mimeType = Files.probeContentType(filePath);
 
             final var content = Files.readAllBytes(filePath);
-            outWrite(mimeType, content, out);
+            Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -65,7 +65,7 @@ public class Main {
             final var mimeType = Files.probeContentType(filePath);
 
             final var content = Files.readAllBytes(filePath);
-            outWrite(mimeType, content, out);
+            Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -76,17 +76,7 @@ public class Main {
 
     }
 
-  private static void outWrite(String mimeType, byte[] content, BufferedOutputStream out) throws IOException {
-    out.write((
-            "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: " + mimeType + "\r\n" +
-                    "Content-Length: " + content.length + "\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n"
-    ).getBytes());
-    out.write(content);
-    out.flush();
-  }
+
 
 }
 

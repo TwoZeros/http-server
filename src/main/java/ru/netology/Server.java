@@ -74,6 +74,18 @@ public class Server {
                 e.printStackTrace();
             }
         }
+
+    public static void outWrite(String mimeType, byte[] content, BufferedOutputStream out) throws IOException {
+        out.write((
+                "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: " + mimeType + "\r\n" +
+                        "Content-Length: " + content.length + "\r\n" +
+                        "Connection: close\r\n" +
+                        "\r\n"
+        ).getBytes());
+        out.write(content);
+        out.flush();
+    }
     }
 
 
