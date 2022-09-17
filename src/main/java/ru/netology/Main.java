@@ -1,83 +1,85 @@
 package ru.netology;
 
-import java.io.*;
-import java.net.ServerSocket;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.time.format.DateTimeFormatter;
 
 public class Main {
-  public static void main(String[] args) {
-    final var validPaths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html", "/events.html", "/events.js");
+    public static final int PORT = 8080;
+    public static final int THREADS = 64;
 
-    try (final var serverSocket = new ServerSocket(9999)) {
-      while (true) {
-        try (
-            final var socket = serverSocket.accept();
-            final var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            final var out = new BufferedOutputStream(socket.getOutputStream());
-        ) {
-          // read only request line for simplicity
-          // must be in form GET /path HTTP/1.1
-          final var requestLine = in.readLine();
-          final var parts = requestLine.split(" ");
+    public static void main(String[] args) {
 
-          if (parts.length != 3) {
-            // just close socket
-            continue;
-          }
-
-          final var path = parts[1];
-          if (!validPaths.contains(path)) {
-            out.write((
-                "HTTP/1.1 404 Not Found\r\n" +
-                    "Content-Length: 0\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n"
-            ).getBytes());
-            out.flush();
-            continue;
-          }
-
-          final var filePath = Path.of(".", "public", path);
-          final var mimeType = Files.probeContentType(filePath);
-
-          // special case for classic
-          if (path.equals("/classic.html")) {
+      Server server = new Server(THREADS);
+      // добавление handler'ов (обработчиков)
+      server.addHandler("GET", "/classic.html", new Handler() {
+        public void handle(Request request, BufferedOutputStream out) {
+          try {
+            var filePath = Path.of(".", "public", request.getPath());
+            var mimeType = Files.probeContentType(filePath);
             final var template = Files.readString(filePath);
-            final var content = template.replace(
-                "{time}",
-                LocalDateTime.now().toString()
-            ).getBytes();
-            out.write((
-                "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: " + mimeType + "\r\n" +
-                    "Content-Length: " + content.length + "\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n"
-            ).getBytes());
-            out.write(content);
-            out.flush();
-            continue;
+            final var content = template.replace("{time}",
+                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")))
+                    .getBytes();
+            Server.outWrite(mimeType, content, out);
+          } catch (IOException e) {
+            e.printStackTrace();
           }
-
-          final var length = Files.size(filePath);
-          out.write((
-              "HTTP/1.1 200 OK\r\n" +
-                  "Content-Type: " + mimeType + "\r\n" +
-                  "Content-Length: " + length + "\r\n" +
-                  "Connection: close\r\n" +
-                  "\r\n"
-          ).getBytes());
-          Files.copy(filePath, out);
-          out.flush();
         }
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
+      });
+      server.addHandler("POST", "/events.html", new Handler() {
+        public void handle(Request request, BufferedOutputStream out) {
+          try {
+            final var filePath = Path.of(".", "public", request.getPath());
+            final var mimeType = Files.probeContentType(filePath);
+
+            final var content = Files.readAllBytes(filePath);
+            Server.outWrite(mimeType, content, out);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+      });
+
+      server.addHandler("GET", "/index.html", new Handler() {
+        public void handle(Request request, BufferedOutputStream out) {
+          try {
+            final var filePath = Path.of(".", "public", request.getPath());
+            final var mimeType = Files.probeContentType(filePath);
+
+            final var content = Files.readAllBytes(filePath);
+            Server.outWrite(mimeType, content, out);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+      });
+
+      server.addHandler("GET", "/links.html", new Handler() {
+        public void handle(Request request, BufferedOutputStream out) {
+          try {
+            final var filePath = Path.of(".", "public", request.getPath());
+            final var mimeType = Files.probeContentType(filePath);
+
+            final var content = Files.readAllBytes(filePath);
+            Server.outWrite(mimeType, content, out);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+      });
+
+      server.listen(PORT);
+
     }
-  }
+
+
+
 }
+
+
 
 
