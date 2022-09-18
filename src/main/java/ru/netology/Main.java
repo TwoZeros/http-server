@@ -35,7 +35,6 @@ public class Main {
           try {
             final var filePath = Path.of(".", "public", request.getPath());
             final var mimeType = Files.probeContentType(filePath);
-
             final var content = Files.readAllBytes(filePath);
             Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
@@ -49,8 +48,11 @@ public class Main {
           try {
             final var filePath = Path.of(".", "public", request.getPath());
             final var mimeType = Files.probeContentType(filePath);
-
-            final var content = Files.readAllBytes(filePath);
+            var template = Files.readString(filePath);
+            template = template.replace("{name}", request.getQueryParam("name")
+                    .orElse("World"));
+            template = template.replace("{params}",request.getQueryParams().toString());
+            final var content = template.getBytes();
             Server.outWrite(mimeType, content, out);
           } catch (IOException e) {
             e.printStackTrace();

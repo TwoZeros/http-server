@@ -60,23 +60,21 @@ public class Request {
         if (!allowedMethods.contains(method)) {
             throw new BadRequestException("Invalid method:" + method);
         }
-        System.out.println(method);
 
-        String path = requestLine[1];
-        System.out.println(path);
-        if (!path.startsWith("/")) {
+        final String uri = requestLine[1];
+        String path;
+        System.out.println(uri);
+        if (!uri.startsWith("/")) {
             throw new BadRequestException("Invalid Path");
         }
         List<NameValuePair> queryParams = new ArrayList<>();
-        if (path.contains("?")) {
-            String[] value = path.split("\\?");
-            path = value[0];
-            String queryLine = value[1];
+        if (uri.contains("?")) {
+            path = uri.split("\\?")[0];
+            String queryLine =  uri.split("\\?")[1];
             queryParams = URLEncodedUtils.parse(queryLine, Charset.defaultCharset());
-            System.out.println(queryParams);
+        } else {
+            path = uri;
         }
-
-        System.out.println(path);
 
         // ищем заголовки
         final var headersDelimiter = new byte[]{'\r', '\n', '\r', '\n'};
@@ -93,7 +91,6 @@ public class Request {
 
         final var headersBytes = in.readNBytes(headersEnd - headersStart);
         final var headers = Arrays.asList(new String(headersBytes).split("\r\n"));
-        System.out.println(headers);
 
         // для GET тела нет
         if (!method.equals(GET)) {
